@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Yélé</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ─── Header ──────────────────────────────────────────────────────────────── -->
+<header class="topbar">
+  <div class="brand">
+    <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="36" height="36" rx="10" fill="#0e7a4a"/>
+      <path d="M10 22 L14 14 L18 20 L22 10 L26 18" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    </svg>
+    <div class="brand-text">
+      <span class="brand-title"><b>Yélé</b></span>
+      <span class="brand-sub">Couverture &amp; qualité des réseaux mobiles</span>
+    </div>
+  </div>
+
+  <nav class="topnav">
+    <button class="topnav-item active" data-view="map">Carte</button>
+    <button class="topnav-item" data-view="compare">Comparer les opérateurs</button>
+    <button class="topnav-item" data-view="stats">Statistiques</button>
+    <button class="topnav-item" data-view="history">Historique des tests</button>
+    <button class="topnav-item" data-view="ai">Analyse IA</button>
+  </nav>
+
+  <div class="topbar-right">
+    <div class="searchbox">
+      <svg viewBox="0 0 24 24" class="search-icon"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" id="search-input" placeholder="Rechercher une adresse, une ville…" autocomplete="off">
+      <div class="search-results" id="search-results"></div>
+    </div>
+    
+  </div>
+</header>
+
+<!-- ─── Vue Carte ───────────────────────────────────────────────────────────── -->
+<section class="view view-map active" id="view-map">
+  <div id="main-map"></div>
+
+  <!-- Panneau de contrôle gauche (style ARCEP) -->
+  <aside class="control-panel">
+    <div class="panel-block">
+      <div class="panel-label">Usage</div>
+      <div class="usage-tabs" id="usage-tabs">
+        <button class="usage-tab active" data-usage="debit">
+          <svg viewBox="0 0 24 24"><path d="M12 2v10"/><path d="M5 9l7-7 7 7"/><path d="M5 22h14"/><path d="M5 17h14"/></svg>
+          <span>Speedtest<small>Débit &amp; latence</small></span>
+        </button>
+        <button class="usage-tab" data-usage="streaming">
+          <svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="14" rx="2"/><polygon points="10 8 16 11 10 14 10 8"/></svg>
+          <span>Streaming vidéo<small>Fluidité &amp; résolution</small></span>
+        </button>
+        <button class="usage-tab" data-usage="browsing">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          <span>Navigation web<small>Temps de chargement</small></span>
+        </button>
+      </div>
+    </div>
+
+    <div class="panel-block">
+      <div class="panel-label">Opérateurs</div>
+      <div class="operator-chips" id="operator-chips">
+        <button class="chip active" data-operator="">Tous</button>
+      </div>
+    </div>
+
+    <div class="panel-block">
+      <div class="panel-label">Technologie</div>
+      <div class="tech-chips" id="tech-chips">
+        <button class="chip active" data-tech="">Toutes</button>
+      </div>
+    </div>
+
+    <div class="panel-block">
+      <div class="panel-label">Période <small>— moyennes par</small></div>
+      <div class="toggle-group period-grain" id="period-grain">
+        <button class="toggle active" data-grain="all">Tout</button>
+        <button class="toggle" data-grain="hour">Heure</button>
+        <button class="toggle" data-grain="weekday">Jour</button>
+        <button class="toggle" data-grain="week">Semaine</button>
+      </div>
+      <select class="period-select" id="period-value" style="display:none"></select>
+    </div>
+
+    <div class="panel-block">
+      <div class="panel-label">Affichage</div>
+      <div class="display-toggles">
+        <div class="toggle-group" id="display-mode">
+          <button class="toggle active" data-mode="points">Points de test</button>
+          <button class="toggle" data-mode="heatmap">Carte de chaleur</button>
+        </div>
+        <div class="toggle-group" id="basemap-mode">
+          <button class="toggle active" data-base="plan">Plan</button>
+          <button class="toggle" data-base="satellite">Satellite</button>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Panneau statistiques de zone (droite) -->
+  <aside class="zone-panel" id="zone-panel">
+    <div class="zone-header">
+      <div>
+        <div class="zone-title">Statistiques de la zone</div>
+        <div class="zone-sub" id="zone-sub">Zone visible sur la carte</div>
+      </div>
+      <button class="zone-collapse" id="zone-collapse" title="Replier">›</button>
+    </div>
+    <div class="zone-body" id="zone-body">
+      <div class="zone-kpis">
+        <div class="zone-kpi"><b id="zk-count">–</b><span>tests</span></div>
+        <div class="zone-kpi"><b id="zk-dl">–</b><span>Mbps ↓ moy.</span></div>
+        <div class="zone-kpi"><b id="zk-ul">–</b><span>Mbps ↑ moy.</span></div>
+        <div class="zone-kpi"><b id="zk-ping">–</b><span>ms ping moy.</span></div>
+      </div>
+      <div class="zone-section-label">Répartition par niveau de qualité</div>
+      <div class="quality-bar" id="zone-quality-bar"></div>
+      <div class="quality-bar-legend" id="zone-quality-legend"></div>
+      <div class="zone-section-label">Comparaison des opérateurs <small>(débit ↓ moyen)</small></div>
+      <div class="zone-operators" id="zone-operators"></div>
+    </div>
+  </aside>
+
+  <button class="locate-btn" id="locate-btn" title="Ma position">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8"/></svg>
+  </button>
+</section>
+
+<!-- ─── Vue Comparer ────────────────────────────────────────────────────────── -->
+<section class="view view-compare" id="view-compare">
+  <div class="page-head">
+    <h1>Comparer les opérateurs</h1>
+    <p>Cartes synchronisées : déplacez ou zoomez l'une des cartes, les autres suivent. Chaque carte affiche les tests d'un seul opérateur.</p>
+  </div>
+  <div class="compare-grid" id="compare-grid"></div>
+</section>
+
+<!-- ─── Vue Statistiques ────────────────────────────────────────────────────── -->
+<section class="view view-stats" id="view-stats">
+  <div class="page-head">
+    <h1>Statistiques</h1>
+    <p>Vue d'ensemble des mesures collectées par l'application mobile Yélé.</p>
+  </div>
+
+  <div class="kpi-grid">
+    <div class="kpi-card"><div class="kpi-value" id="kpi-total">–</div><div class="kpi-label">Tests réalisés</div></div>
+    <div class="kpi-card"><div class="kpi-value" id="kpi-today">–</div><div class="kpi-label">Tests aujourd'hui</div></div>
+    <div class="kpi-card"><div class="kpi-value" id="kpi-dl">–</div><div class="kpi-label">Débit ↓ moyen (Mbps)</div></div>
+    <div class="kpi-card"><div class="kpi-value" id="kpi-ul">–</div><div class="kpi-label">Débit ↑ moyen (Mbps)</div></div>
+    <div class="kpi-card"><div class="kpi-value" id="kpi-ping">–</div><div class="kpi-label">Ping moyen (ms)</div></div>
+  </div>
+
+  <div class="charts-grid">
+    <div class="card chart-card wide">
+      <div class="card-head">
+        <h2>Évolution des tests</h2>
+        <div class="toggle-group" id="timeline-days">
+          <button class="toggle" data-days="7">7 j</button>
+          <button class="toggle active" data-days="30">30 j</button>
+          <button class="toggle" data-days="90">90 j</button>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="chart-timeline"></canvas></div>
+    </div>
+    <div class="card chart-card">
+      <div class="card-head"><h2>Débit moyen par opérateur</h2></div>
+      <div class="chart-wrap"><canvas id="chart-operators"></canvas></div>
+    </div>
+    <div class="card chart-card">
+      <div class="card-head"><h2>Répartition par technologie</h2></div>
+      <div class="chart-wrap"><canvas id="chart-network"></canvas></div>
+    </div>
+    <div class="card chart-card wide">
+      <div class="card-head"><h2>Statistiques avancées par opérateur (percentiles du débit ↓)</h2></div>
+      <div class="table-wrap">
+        <table class="data-table" id="advanced-table">
+          <thead><tr>
+            <th>Opérateur</th><th>Tests</th><th>Moyenne</th><th>P25</th><th>Médiane</th><th>P75</th><th>P90</th><th>↑ Moyen</th><th>Ping méd.</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── Vue Historique ──────────────────────────────────────────────────────── -->
+<section class="view view-history" id="view-history">
+  <div class="page-head">
+    <h1>Historique des tests</h1>
+    <p>Liste détaillée de toutes les mesures remontées par l'application mobile.</p>
+  </div>
+
+  <div class="card">
+    <div class="history-filters">
+      <select id="hf-operator"><option value="">Tous les opérateurs</option></select>
+      <select id="hf-network"><option value="">Toutes les technologies</option></select>
+      <label>Du <input type="date" id="hf-from"></label>
+      <label>Au <input type="date" id="hf-to"></label>
+      <button class="btn-primary" id="hf-apply">Filtrer</button>
+      <button class="btn-ghost" id="hf-reset">Réinitialiser</button>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table" id="history-table">
+        <thead><tr>
+          <th>Date</th><th>FAI</th><th>Réseau mobile</th><th>Réseau</th><th>↓ Mbps</th><th>↑ Mbps</th><th>Ping</th><th>Jitter</th><th>Streaming</th><th>Nav. web</th><th>Lieu</th><th>Appareil</th><th>Qualité</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="pagination">
+      <button class="btn-ghost" id="hp-prev">‹ Précédent</button>
+      <span id="hp-info">–</span>
+      <button class="btn-ghost" id="hp-next">Suivant ›</button>
+    </div>
+  </div>
+</section>
+
+<!-- ─── Vue Analyse IA ──────────────────────────────────────────────────────── -->
+<section class="view view-ai" id="view-ai">
+  <div class="page-head">
+    <h1>Analyse IA</h1>
+    <p>Détection automatique des anomalies réseau et prévision de la qualité, calculées par le service d'intelligence artificielle Yélé.</p>
+  </div>
+
+  <div class="kpi-grid">
+    <div class="kpi-card"><div class="kpi-value" id="ai-status">–</div><div class="kpi-label">État du service IA</div></div>
+    <div class="kpi-card"><div class="kpi-value" id="ai-analyzed">–</div><div class="kpi-label">Mesures analysées (30 j)</div></div>
+    <div class="kpi-card"><div class="kpi-value" id="ai-anomaly-count">–</div><div class="kpi-label">Anomalies détectées</div></div>
+    <div class="kpi-card"><div class="kpi-value" id="ai-ml-ready">–</div><div class="kpi-label">Modèles ML actifs</div></div>
+  </div>
+
+  <div class="charts-grid">
+    <div class="card chart-card wide">
+      <div class="card-head">
+        <h2>Prévision du débit descendant (48 h)</h2>
+        <select id="ai-forecast-operator"></select>
+      </div>
+      <div class="chart-wrap"><canvas id="chart-forecast"></canvas></div>
+    </div>
+
+    <div class="card chart-card wide">
+      <div class="card-head"><h2>Anomalies détectées (30 derniers jours)</h2></div>
+      <div class="table-wrap">
+        <table class="data-table" id="ai-anomalies-table">
+          <thead><tr>
+            <th>Date</th><th>Opérateur</th><th>Réseau</th><th>↓ Mbps</th><th>Ping</th><th>Sévérité</th><th>Raisons</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Bannière "bientôt disponible" -->
+<div class="soon-banner" id="soon-banner">
+  <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+  <div>
+    <b id="soon-banner-title">Bientôt disponible</b>
+    <p id="soon-banner-text">Les tests de streaming et de navigation web seront bientôt intégrés à l'application mobile Yélé.</p>
+  </div>
+  <button id="soon-banner-close">✕</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script src="config.js"></script>
+<script src="js/quality.js"></script>
+<script src="js/api.js"></script>
+<script src="js/map.js"></script>
+<script src="js/compare.js"></script>
+<script src="js/stats.js"></script>
+<script src="js/history.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
