@@ -60,9 +60,11 @@ const App = (() => {
   async function checkHealth() {
     const dot = document.getElementById('status-dot');
     const label = document.getElementById('status-label');
+    // L'indicateur de statut n'est pas affiché dans toutes les mises en page.
+    if (!dot && !label) return;
     const ok = await API.health();
-    dot.className = 'status-dot ' + (ok ? 'ok' : 'ko');
-    label.textContent = ok ? 'Serveur en ligne' : 'Serveur hors ligne';
+    if (dot) dot.className = 'status-dot ' + (ok ? 'ok' : 'ko');
+    if (label) label.textContent = ok ? 'Serveur en ligne' : 'Serveur hors ligne';
   }
 
   // ── Bannière "bientôt disponible" & toast ───────────────────────────────────
