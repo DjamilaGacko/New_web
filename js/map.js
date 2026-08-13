@@ -71,6 +71,17 @@ const MapView = (() => {
 
   // ── Période (heure / jour / semaine) ────────────────────────────────────────
 
+  // Les dates du backend arrivent en "JJ/MM/AAAA HH:MM". new Date() les lirait
+  // à l'américaine (mois/jour inversés) → semaines fausses. On les parse ici.
+  function parseTs(s) {
+    if (s instanceof Date) return s;
+    if (typeof s === 'string') {
+      const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ T](\d{1,2}):(\d{2}))?/);
+      if (m) return new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0));
+    }
+    return new Date(s); // repli : format ISO
+  }
+
   // Clé de semaine = date (YYYY-MM-DD) du lundi de la semaine du point.
   function weekStartKey(d) {
     const x = new Date(d);
@@ -87,7 +98,7 @@ const MapView = (() => {
 
   // Renvoie la « valeur » d'un point pour un grain donné (ou null si date invalide).
   function grainValue(p, grain) {
-    const d = new Date(p.timestamp);
+    const d = parseTs(p.timestamp);
     if (isNaN(d)) return null;
     if (grain === 'hour') return d.getHours();
     if (grain === 'weekday') return d.getDay();
