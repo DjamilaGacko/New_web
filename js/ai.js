@@ -8,7 +8,9 @@ const AIView = (() => {
   const BASE = CONFIG.API_BASE_URL + '/api/ai';
 
   async function getJson(path) {
-    const res = await fetch(BASE + path, { signal: AbortSignal.timeout(60_000) });
+    // 120 s : le service gratuit (Render) s'endort et peut mettre ~60-90 s à
+    // se réveiller au premier appel. En dessous, le chargement échouait.
+    const res = await fetch(BASE + path, { signal: AbortSignal.timeout(120_000) });
     if (!res.ok) throw new Error(`HTTP ${res.status} sur ${path}`);
     return res.json();
   }
@@ -16,6 +18,14 @@ const AIView = (() => {
   async function show() {
     if (built) return;
     built = true;
+    // Message d'attente pendant le réveil éventuel du service.
+    const wrap = document.querySelector('#chart-forecast')?.closest('.chart-wrap');
+    if (wrap) {
+      wrap.innerHTML = '<div style="display:flex;height:100%;align-items:center;'
+        + 'justify-content:center;text-align:center;color:#5d6478;font-size:13px;'
+        + 'padding:0 20px;line-height:1.5">Chargement du service IA…<br>'
+        + '<span style="color:#9aa3b2">(le premier appel peut prendre jusqu\'à 1 min)</span></div>';
+    }
     await loadHealth();
     loadAnomalies();
   }
@@ -106,8 +116,15 @@ const AIView = (() => {
     const labels = points.map((p) =>
       new Date(p.time).toLocaleString('fr-FR', { weekday: 'short', hour: '2-digit' }));
 
+    // Le canvas a pu être remplacé par un message de chargement : on le rétablit.
+    const wrap = document.querySelector('#view-ai .chart-wrap');
+    let canvas = document.getElementById('chart-forecast');
+    if (!canvas && wrap) {
+      wrap.innerHTML = '<canvas id="chart-forecast"></canvas>';
+      canvas = document.getElementById('chart-forecast');
+    }
     if (forecastChart) forecastChart.destroy();
-    forecastChart = new Chart(document.getElementById('chart-forecast'), {
+    forecastChart = new Chart(canvas, {
       type: 'line',
       data: {
         labels,
