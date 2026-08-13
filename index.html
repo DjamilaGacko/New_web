@@ -230,14 +230,94 @@
 <section class="view view-ai" id="view-ai">
   <div class="page-head">
     <h1>Analyse IA</h1>
-    <p>Détection automatique des anomalies réseau et prévision de la qualité, calculées par le service d'intelligence artificielle Yélé.</p>
+    <p>Deux modèles d'intelligence artificielle : détection d'anomalies réseau et
+       prévision de la qualité. Ci-dessous, leurs performances mesurées ; plus bas,
+       le suivi en temps réel.</p>
+  </div>
+
+  <!-- ─── Performance des modèles (évaluation, statique) ───────────────────── -->
+  <div class="kpi-grid" id="ai-eval-kpis">
+    <div class="kpi-card">
+      <div class="kpi-value" style="color:var(--green)">0,830</div>
+      <div class="kpi-label">Détection · ROC-AUC <small>(0,5 = hasard · 1 = parfait)</small></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-value" style="color:var(--green)">0,559</div>
+      <div class="kpi-label">Détection · F1-score <small>(équilibre précision/rappel)</small></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-value">17,2 <small style="font-size:14px">Mb/s</small></div>
+      <div class="kpi-label">Prédiction · erreur moyenne (MAE) <small>réf. naïve : 14,0</small></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-value">3<small style="font-size:15px">/3</small></div>
+      <div class="kpi-label">Niveaux de détection actifs <small>(1/3 au départ)</small></div>
+    </div>
+  </div>
+
+  <div class="charts-grid">
+    <div class="card chart-card wide">
+      <div class="card-head">
+        <h2>Progression de la détection d'anomalies</h2>
+        <span class="ai-eval-note">Plus haut = meilleur</span>
+      </div>
+      <p class="ai-eval-caption">Trois indicateurs, à trois étapes du projet. On passe d'un modèle
+        « proche du hasard » (ROC-AUC 0,59) à un <b>bon</b> détecteur (0,83).</p>
+      <div class="chart-wrap"><canvas id="chart-eval-progress"></canvas></div>
+    </div>
+
+    <div class="card chart-card">
+      <div class="card-head"><h2>Prédiction : le modèle bat-il la « médiane » ?</h2></div>
+      <p class="ai-eval-caption">Skill&nbsp;score par pli de validation croisée. Barre <b>verte</b> = le
+        modèle fait mieux que prédire toujours la médiane ; <b>rouge</b> = moins bien.
+        Résultat : 3&nbsp;plis sur&nbsp;4 positifs, mais instable → il faut plus de données.</p>
+      <div class="chart-wrap"><canvas id="chart-eval-skill"></canvas></div>
+    </div>
+
+    <div class="card chart-card">
+      <div class="card-head"><h2>Apport de chaque niveau de détection</h2></div>
+      <p class="ai-eval-caption">Part des alertes déclenchées par chacun des trois niveaux.
+        Après correction des seuils, les trois contribuent (contre un seul avant).</p>
+      <div class="chart-wrap"><canvas id="chart-eval-levels"></canvas></div>
+    </div>
+
+    <div class="card chart-card wide">
+      <div class="card-head">
+        <h2>Précision@k — fiabilité du haut de liste</h2>
+        <span class="ai-eval-note">Ce que voit l'utilisateur</span>
+      </div>
+      <p class="ai-eval-caption">Parmi les k anomalies les mieux classées, part de vraies anomalies.
+        On ne lit jamais 200 alertes : seul le haut de liste compte. 80&nbsp;% des 20 premières sont justes.</p>
+      <div class="chart-wrap"><canvas id="chart-eval-precisionk"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card chart-card wide" style="margin-top:16px">
+    <div class="card-head"><h2>Comment lire ces métriques</h2></div>
+    <div class="ai-eval-glossary">
+      <div><b>MAE</b> — erreur moyenne de prédiction, en Mb/s. Plus c'est bas, mieux c'est.</div>
+      <div><b>Skill score</b> — le modèle fait-il mieux qu'une solution bête (toujours la médiane) ? &gt;0 = utile, &lt;0 = inutile.</div>
+      <div><b>F1-score</b> — équilibre entre précision (les alertes sont-elles justes ?) et rappel (rate-t-on des pannes ?). De 0 à 1.</div>
+      <div><b>ROC-AUC</b> — capacité à distinguer une anomalie d'une mesure normale. 0,5 = hasard, 0,8+ = bon.</div>
+      <div><b>PR-AUC</b> — même idée, adaptée aux anomalies rares. Référence hasard ici = 0,14, pas 0,5.</div>
+      <div><b>Précision@k</b> — fiabilité des k alertes les plus graves — la vue réelle de l'utilisateur.</div>
+    </div>
+    <p class="ai-eval-caption" style="margin:12px 4px 2px">
+      ⚠️ Métriques calculées sur 120 mesures (13 jours). La détection est solide ;
+      la prédiction reste limitée par le volume de données, non par l'algorithme.
+    </p>
+  </div>
+
+  <!-- ─── Suivi en temps réel (nécessite le service IA déployé) ────────────── -->
+  <div class="page-head" style="margin-top:26px">
+    <h1>Suivi en temps réel</h1>
+    <p>État du service IA en ligne, anomalies récentes et prévision 48&nbsp;h.
+       Nécessite le micro-service IA déployé — sinon cette partie reste vide.</p>
   </div>
 
   <div class="kpi-grid">
-    <div class="kpi-card"><div class="kpi-value" id="ai-status">–</div><div class="kpi-label">État du service IA</div></div>
     <div class="kpi-card"><div class="kpi-value" id="ai-analyzed">–</div><div class="kpi-label">Mesures analysées (30 j)</div></div>
     <div class="kpi-card"><div class="kpi-value" id="ai-anomaly-count">–</div><div class="kpi-label">Anomalies détectées</div></div>
-    <div class="kpi-card"><div class="kpi-value" id="ai-ml-ready">–</div><div class="kpi-label">Modèles ML actifs</div></div>
   </div>
 
   <div class="charts-grid">

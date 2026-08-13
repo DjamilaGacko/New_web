@@ -16,31 +16,121 @@ const AIView = (() => {
   async function show() {
     if (built) return;
     built = true;
+    renderEvalCharts();
     await loadHealth();
     loadAnomalies();
+  }
+
+  // ── Graphiques d'évaluation (résultats statiques de evaluate.py) ────────────
+  // Chiffres finaux : TabPFN 2.2.1 + seuils de détection corrigés, sur 120 mesures.
+
+  const GREEN = '#0e7a4a', RED = '#dc2626', ORANGE = '#ea580c', GREY = '#9aa3b2';
+
+  function renderEvalCharts() {
+    const grid = { color: 'rgba(0,0,0,.05)' };
+
+    // 1) Progression de la détection : 3 métriques × 3 étapes
+    new Chart(document.getElementById('chart-eval-progress'), {
+      type: 'bar',
+      data: {
+        labels: ['ROC-AUC', 'F1-score', 'PR-AUC'],
+        datasets: [
+          { label: 'Départ (Gradient Boosting)', data: [0.592, 0.309, 0.253], backgroundColor: GREY },
+          { label: 'TabPFN', data: [0.661, 0.450, 0.301], backgroundColor: '#7cc4a4' },
+          { label: 'TabPFN + seuils corrigés', data: [0.830, 0.559, 0.476], backgroundColor: GREEN },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: { y: { beginAtZero: true, max: 1, grid, ticks: { stepSize: 0.2 } },
+                  x: { grid: { display: false } } },
+        plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+      },
+    });
+
+    // 2) Skill score par pli de validation croisée (prédiction)
+    const skills = [0.121, -0.040, 0.022, 0.157];
+    new Chart(document.getElementById('chart-eval-skill'), {
+      type: 'bar',
+      data: {
+        labels: ['Pli 1', 'Pli 2', 'Pli 3', 'Pli 4'],
+        datasets: [{
+          label: 'Skill score',
+          data: skills,
+          backgroundColor: skills.map((s) => (s >= 0 ? GREEN : RED)),
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: (c) => `Skill : ${c.raw >= 0 ? '+' : ''}${c.raw.toFixed(3)}` } },
+        },
+        scales: {
+          y: { grid, title: { display: true, text: '← moins bon   |   meilleur →' },
+               ticks: { callback: (v) => (v > 0 ? '+' : '') + v } },
+          x: { grid: { display: false } },
+        },
+      },
+    });
+
+    // 3) Apport de chaque niveau de détection (doughnut)
+    new Chart(document.getElementById('chart-eval-levels'), {
+      type: 'doughnut',
+      data: {
+        labels: ['Contextuel (résidu)', 'Statistique (percentile)', 'Isolation Forest'],
+        datasets: [{ data: [74, 21, 5], backgroundColor: [GREEN, ORANGE, '#3b82f6'] }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, cutout: '58%',
+        plugins: {
+          legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+          tooltip: { callbacks: { label: (c) => ` ${c.label} : ${c.raw}%` } },
+        },
+      },
+    });
+
+    // 4) Précision@k
+    new Chart(document.getElementById('chart-eval-precisionk'), {
+      type: 'line',
+      data: {
+        labels: ['Top 5', 'Top 10', 'Top 20', 'Top 50'],
+        datasets: [{
+          label: 'Part de vraies anomalies',
+          data: [0.80, 0.70, 0.80, 0.68],
+          borderColor: GREEN, backgroundColor: 'rgba(14,122,74,.12)',
+          fill: true, tension: .3, pointRadius: 4, pointBackgroundColor: GREEN,
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false },
+                   tooltip: { callbacks: { label: (c) => `${Math.round(c.raw * 100)}% de vraies anomalies` } } },
+        scales: { y: { beginAtZero: true, max: 1, grid, ticks: { callback: (v) => Math.round(v * 100) + '%' } },
+                  x: { grid: { display: false } } },
+      },
+    });
   }
 
   // ── État du service + liste des opérateurs pour la prévision ───────────────
 
   async function loadHealth() {
-    const statusEl = document.getElementById('ai-status');
-    const mlEl = document.getElementById('ai-ml-ready');
     try {
       const h = await getJson('/health');
-      statusEl.textContent = h.status === 'ok' ? 'En ligne'
-        : h.status === 'training' ? 'Entraînement…' : 'Erreur';
-      mlEl.textContent = h.mlReady ? 'Oui'
-        : `Non (${h.samples}/${h.minSamplesForMl} mesures)`;
-
       const sel = document.getElementById('ai-forecast-operator');
       sel.innerHTML = '';
       (h.operators || []).forEach((op) => sel.add(new Option(op, op)));
       sel.addEventListener('change', () => loadForecast(sel.value));
       if (h.mlReady && sel.value) loadForecast(sel.value);
     } catch (e) {
-      statusEl.textContent = 'Indisponible';
-      mlEl.textContent = '–';
-      App.toast('Service IA injoignable : ' + e.message);
+      // État vide clair plutôt qu'un grand cadre blanc.
+      const wrap = document.querySelector('#chart-forecast')?.closest('.chart-wrap');
+      if (wrap) {
+        wrap.innerHTML = '<div style="display:flex;height:100%;align-items:center;'
+          + 'justify-content:center;text-align:center;color:#9aa3b2;font-size:13px;'
+          + 'padding:0 20px;line-height:1.5">Le micro-service IA temps réel n\'est pas '
+          + 'déployé.<br>Les performances des modèles (ci-dessus) restent visibles.</div>';
+      }
     }
   }
 
