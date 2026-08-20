@@ -4,13 +4,45 @@ const API = (() => {
   const BASE = CONFIG.API_BASE_URL;
   const cache = {};
 
+  // 120 s : sur l'offre gratuite Render, le service s'endort après 15 min et met
+  // ~60-90 s à se réveiller. Pendant ce réveil, Render renvoie sa propre page
+  // d'erreur 502/503, sans les en-têtes CORS du backend Go — le navigateur
+  // signale alors une « erreur CORS » trompeuse. D'où le timeout long + les
+  // tentatives successives ci-dessous.
+  const TIMEOUT_MS = 120_000;
+  const RETRIES = 2;
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
   async function get(path, { useCache = true } = {}) {
     if (useCache && cache[path]) return cache[path];
-    const res = await fetch(BASE + path, { signal: AbortSignal.timeout(60_000) });
-    if (!res.ok) throw new Error(`HTTP ${res.status} sur ${path}`);
-    const data = await res.json();
-    if (useCache) cache[path] = data;
-    return data;
+
+    let lastError;
+    for (let attempt = 0; attempt <= RETRIES; attempt++) {
+      if (attempt > 0) await sleep(2000 * attempt); // 2 s puis 4 s
+      try {
+        const res = await fetch(BASE + path, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+        // 502/503 = backend encore en cours de réveil : on retente.
+        if (res.status === 502 || res.status === 503) {
+          lastError = new Error(`Serveur indisponible (HTTP ${res.status})`);
+          continue;
+        }
+        if (!res.ok) throw new Error(`HTTP ${res.status} sur ${path}`);
+        const data = await res.json();
+        if (useCache) cache[path] = data;
+        return data;
+      } catch (e) {
+        // Erreur réseau ou timeout (réveil du service) : on retente.
+        // Les autres erreurs (HTTP 4xx, JSON invalide) ne sont pas transitoires.
+        if (e.name !== 'TypeError' && e.name !== 'TimeoutError' && e.name !== 'AbortError') throw e;
+        lastError = e;
+      }
+    }
+    throw new Error(
+      'Le serveur ne répond pas. S\'il était en veille, il peut mettre '
+      + 'jusqu\'à une minute à redémarrer — réessayez dans un instant. '
+      + `(${lastError?.message || 'échec réseau'})`
+    );
   }
 
   return {

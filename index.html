@@ -27,6 +27,7 @@
 
   <nav class="topnav">
     <button class="topnav-item active" data-view="map">Carte</button>
+    <button class="topnav-item" data-view="operators">Opérateurs</button>
     <button class="topnav-item" data-view="compare">Comparer les opérateurs</button>
     <button class="topnav-item" data-view="stats">Statistiques</button>
     <button class="topnav-item" data-view="history">Historique des tests</button>
@@ -47,8 +48,14 @@
 <section class="view view-map active" id="view-map">
   <div id="main-map"></div>
 
-  <!-- Panneau de contrôle gauche (style ARCEP) -->
-  <aside class="control-panel">
+  <!-- Panneau de contrôle gauche (style ARCEP), repliable -->
+  <aside class="control-panel" id="control-panel">
+    <button class="panel-toggle" id="panel-toggle" title="Replier les filtres" aria-expanded="true">
+      <svg class="icon-filters" viewBox="0 0 24 24"><line x1="4" y1="8" x2="20" y2="8"/><line x1="4" y1="16" x2="20" y2="16"/><circle cx="9" cy="8" r="2.5"/><circle cx="15" cy="16" r="2.5"/></svg>
+      <svg class="icon-chevron" viewBox="0 0 24 24"><polyline points="15 6 9 12 15 18"/></svg>
+    </button>
+
+    <div class="panel-content" id="panel-content">
     <div class="panel-block">
       <div class="panel-label">Usage</div>
       <div class="usage-tabs" id="usage-tabs">
@@ -105,35 +112,58 @@
         </div>
       </div>
     </div>
-  </aside>
-
-  <!-- Panneau statistiques de zone (droite) -->
-  <aside class="zone-panel" id="zone-panel">
-    <div class="zone-header">
-      <div>
-        <div class="zone-title">Statistiques de la zone</div>
-        <div class="zone-sub" id="zone-sub">Zone visible sur la carte</div>
-      </div>
-      <button class="zone-collapse" id="zone-collapse" title="Replier">›</button>
-    </div>
-    <div class="zone-body" id="zone-body">
-      <div class="zone-kpis">
-        <div class="zone-kpi"><b id="zk-count">–</b><span>tests</span></div>
-        <div class="zone-kpi"><b id="zk-dl">–</b><span>Mbps ↓ moy.</span></div>
-        <div class="zone-kpi"><b id="zk-ul">–</b><span>Mbps ↑ moy.</span></div>
-        <div class="zone-kpi"><b id="zk-ping">–</b><span>ms ping moy.</span></div>
-      </div>
-      <div class="zone-section-label">Répartition par niveau de qualité</div>
-      <div class="quality-bar" id="zone-quality-bar"></div>
-      <div class="quality-bar-legend" id="zone-quality-legend"></div>
-      <div class="zone-section-label">Comparaison des opérateurs <small>(débit ↓ moyen)</small></div>
-      <div class="zone-operators" id="zone-operators"></div>
-    </div>
+    </div><!-- /.panel-content -->
   </aside>
 
   <button class="locate-btn" id="locate-btn" title="Ma position">
     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8"/></svg>
   </button>
+</section>
+
+<!-- ─── Vue Opérateurs ──────────────────────────────────────────────────────── -->
+<section class="view view-operators" id="view-operators">
+  <div class="page-head">
+    <h1>Opérateurs</h1>
+    <p>Débits mesurés par opérateur, regroupés par période et par lieu de test.
+       Cliquez sur un en-tête pour trier, ou sur un lieu pour le retrouver sur la carte.</p>
+  </div>
+
+  <div class="kpi-grid">
+    <div class="kpi-card"><div class="kpi-value" id="op-kpi-rows">–</div><div class="kpi-label">Lignes comparées</div></div>
+    <div class="kpi-card"><div class="kpi-value" id="op-kpi-tests">–</div><div class="kpi-label">Tests agrégés</div></div>
+    <div class="kpi-card"><div class="kpi-value" id="op-kpi-best">–</div><div class="kpi-label">Meilleur débit ↓ moyen</div></div>
+  </div>
+
+  <div class="card">
+    <div class="history-filters">
+      <div class="toggle-group" id="op-grain">
+        <button class="toggle active" data-grain="day">Par jour</button>
+        <button class="toggle" data-grain="week">Par semaine</button>
+        <button class="toggle" data-grain="all">Toutes dates</button>
+      </div>
+      <select id="op-filter-operator"><option value="">Tous les opérateurs</option></select>
+      <select id="op-filter-tech"><option value="">Toutes les technologies</option></select>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table sortable" id="operators-table">
+        <thead><tr>
+          <th data-sort="periodKey">Période</th>
+          <th data-sort="operator">Opérateur</th>
+          <th data-sort="count">Tests</th>
+          <th data-sort="avgDl">↓ Mbps moy.</th>
+          <th data-sort="avgUl">↑ Mbps moy.</th>
+          <th data-sort="avgPing">Ping moy.</th>
+          <th>Réseau</th>
+          <th data-sort="location">Géolocalisation</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="pagination" id="op-more-wrap" style="display:none">
+      <span id="op-more-info">–</span>
+      <button class="btn-ghost" id="op-more">Afficher plus</button>
+    </div>
+  </div>
 </section>
 
 <!-- ─── Vue Comparer ────────────────────────────────────────────────────────── -->
@@ -281,6 +311,7 @@
 <script src="js/quality.js"></script>
 <script src="js/api.js"></script>
 <script src="js/map.js"></script>
+<script src="js/operators.js"></script>
 <script src="js/compare.js"></script>
 <script src="js/stats.js"></script>
 <script src="js/history.js"></script>

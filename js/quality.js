@@ -27,6 +27,39 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
+// ─── Dates ───────────────────────────────────────────────────────────────────
+// Partagées entre la carte et la vue Opérateurs.
+
+// Les dates du backend arrivent en "JJ/MM/AAAA HH:MM". new Date() les lirait
+// à l'américaine (mois/jour inversés) → semaines fausses. On les parse ici.
+function parseTs(s) {
+  if (s instanceof Date) return s;
+  if (typeof s === 'string') {
+    const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ T](\d{1,2}):(\d{2}))?/);
+    if (m) return new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0));
+  }
+  return new Date(s); // repli : format ISO
+}
+
+// Clé de jour triable : YYYY-MM-DD.
+function dayKey(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// Clé de semaine = date (YYYY-MM-DD) du lundi de la semaine du point.
+function weekStartKey(d) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  const isoDay = (x.getDay() + 6) % 7; // 0 = lundi
+  x.setDate(x.getDate() - isoDay);
+  return dayKey(x);
+}
+
+function weekLabel(key) {
+  const [, m, d] = key.split('-');
+  return `Sem. du ${d}/${m}`;
+}
+
 const USAGES = {
   debit: {
     label: 'Speedtest',

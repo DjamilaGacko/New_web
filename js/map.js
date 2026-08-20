@@ -18,8 +18,14 @@ const MapView = (() => {
     period: { grain: 'all', value: null },
   };
 
-  // Rayon de regroupement des tests en « zones » (≈ 10 m autour d'un lieu).
-  const ZONE_CELL_M = 12;
+  // Rayon de regroupement, exprimé en PIXELS écran et non en mètres : le
+  // regroupement suit donc le zoom. Il vaut plus que le diamètre maximal d'un
+  // rond (46 px), ce qui garantit que deux ronds ne se chevauchent jamais.
+  const CLUSTER_PX = 56;
+
+  // Tous les ronds ont la même couleur : la carte indique où des mesures ont
+  // été faites, pas un jugement de qualité (celui-ci reste dans le popup).
+  const MARKER_COLOR = '#1c1c3c';
 
   const WEEKDAYS = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
 
@@ -41,18 +47,39 @@ const MapView = (() => {
     baseLayers.plan.addTo(map);
     markersLayer = L.layerGroup().addTo(map);
 
-    map.on('moveend', renderZoneStats);
+    // Le regroupement dépend du zoom : il faut le recalculer à chaque niveau.
+    map.on('zoomend', render);
 
     bindControls();
     loadData();
   }
 
+  // Bandeau d'attente : le premier appel peut être long si le backend
+  // (offre gratuite Render) sort de veille. Sans ce retour visuel, la carte
+  // reste vide sans explication pendant une minute.
+  function setLoadingBanner(html) {
+    let el = document.getElementById('map-loading');
+    if (!html) { el?.remove(); return; }
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'map-loading';
+      el.className = 'map-loading';
+      document.getElementById('main-map').appendChild(el);
+    }
+    el.innerHTML = html;
+  }
+
   async function loadData() {
+    setLoadingBanner('Chargement des points de test…<small>Le serveur peut mettre '
+      + 'jusqu\'à une minute à sortir de veille.</small>');
     try {
       allPoints = await API.mapPoints() || [];
+      setLoadingBanner('');
     } catch (e) {
-      App.toast('Impossible de charger les points de test : ' + e.message);
       allPoints = [];
+      setLoadingBanner(`<b>Données indisponibles</b><small>${escapeHtml(e.message)}</small>`
+        + '<button type="button" id="map-retry" class="btn-primary">Réessayer</button>');
+      document.getElementById('map-retry')?.addEventListener('click', loadData);
     }
     buildOperatorChips();
     buildTechChips();
@@ -71,30 +98,8 @@ const MapView = (() => {
 
   // ── Période (heure / jour / semaine) ────────────────────────────────────────
 
-  // Les dates du backend arrivent en "JJ/MM/AAAA HH:MM". new Date() les lirait
-  // à l'américaine (mois/jour inversés) → semaines fausses. On les parse ici.
-  function parseTs(s) {
-    if (s instanceof Date) return s;
-    if (typeof s === 'string') {
-      const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ T](\d{1,2}):(\d{2}))?/);
-      if (m) return new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0));
-    }
-    return new Date(s); // repli : format ISO
-  }
-
-  // Clé de semaine = date (YYYY-MM-DD) du lundi de la semaine du point.
-  function weekStartKey(d) {
-    const x = new Date(d);
-    x.setHours(0, 0, 0, 0);
-    const isoDay = (x.getDay() + 6) % 7; // 0 = lundi
-    x.setDate(x.getDate() - isoDay);
-    return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
-  }
-
-  function weekLabel(key) {
-    const [y, m, d] = key.split('-');
-    return `Sem. du ${d}/${m}`;
-  }
+  // parseTs / weekStartKey / weekLabel sont partagés avec la vue Opérateurs
+  // et définis dans quality.js.
 
   // Renvoie la « valeur » d'un point pour un grain donné (ou null si date invalide).
   function grainValue(p, grain) {
@@ -205,48 +210,72 @@ const MapView = (() => {
       // Affichage par zones : les tests proches (≈ 10 m) sont regroupés en un
       // seul rond qui montre la moyenne de la zone.
       buildZones(points).forEach((zone) => {
-        const lvl = zoneLevel(zone, state.usage);
-        const marker = L.marker([zone.lat, zone.lng], { icon: zoneIcon(qualityColor(lvl), zone.count) });
-        marker.bindPopup(zonePopupHtml(zone, lvl), { minWidth: 240 });
+        const marker = L.marker([zone.lat, zone.lng], { icon: zoneIcon(zone.count) });
+        marker.bindPopup(zonePopupHtml(zone, zoneLevel(zone, state.usage)), { minWidth: 240 });
         markersLayer.addLayer(marker);
       });
     }
-
-    renderZoneStats();
   }
 
-  // ── Regroupement des tests en zones (grille ≈ 10 m) ─────────────────────────
+  // ── Regroupement des tests en zones (rayon fixe à l'écran) ──────────────────
 
+  // Regroupe les tests trop proches pour être distingués au zoom courant.
+  // Le rond est ancré sur le point « graine » du groupe et non sur le
+  // barycentre : par construction, deux graines sont distantes d'au moins
+  // CLUSTER_PX pixels, ce qui interdit tout chevauchement. En zoomant, les
+  // groupes se scindent d'eux-mêmes et le détail réapparaît.
   function buildZones(points) {
-    const cells = {};
-    points.forEach((p) => {
-      if (!p.lat || !p.lng) return;
-      const mPerDegLat = 111320;
-      const mPerDegLng = 111320 * Math.cos((p.lat * Math.PI) / 180);
-      const row = Math.round(p.lat / (ZONE_CELL_M / mPerDegLat));
-      const col = Math.round(p.lng / (ZONE_CELL_M / mPerDegLng));
-      const key = `${row}:${col}`;
-      (cells[key] = cells[key] || []).push(p);
-    });
+    const zoom = map.getZoom();
+    const proj = points
+      .filter((p) => p.lat && p.lng)
+      .map((p) => ({ p, xy: map.project([p.lat, p.lng], zoom) }));
 
-    return Object.values(cells).map((pts) => {
-      const n = pts.length;
-      const sum = (fn) => pts.reduce((s, p) => s + (fn(p) || 0), 0);
-      // Nom de la zone = lieu le plus fréquent parmi ses tests.
-      const locCounts = {};
-      pts.forEach((p) => { if (p.location) locCounts[p.location] = (locCounts[p.location] || 0) + 1; });
-      const name = Object.keys(locCounts).sort((a, b) => locCounts[b] - locCounts[a])[0] || 'Zone de test';
-      return {
-        lat: sum((p) => p.lat) / n,
-        lng: sum((p) => p.lng) / n,
-        count: n,
-        name,
-        points: pts,
-        avgDl: sum((p) => p.download) / n,
-        avgUl: sum((p) => p.upload) / n,
-        avgPing: sum((p) => p.ping) / n,
-      };
-    });
+    // Tri nord → sud : rend le résultat stable d'un rendu à l'autre et permet
+    // d'arrêter la recherche dès que l'écart vertical dépasse le rayon.
+    proj.sort((a, b) => a.xy.y - b.xy.y || a.xy.x - b.xy.x);
+
+    const taken = new Array(proj.length).fill(false);
+    const zones = [];
+
+    for (let i = 0; i < proj.length; i++) {
+      if (taken[i]) continue;
+      taken[i] = true;
+      const seed = proj[i];
+      const group = [seed.p];
+
+      for (let j = i + 1; j < proj.length; j++) {
+        const dy = proj[j].xy.y - seed.xy.y;
+        if (dy > CLUSTER_PX) break; // trié par y : plus rien ne peut correspondre
+        if (taken[j]) continue;
+        const dx = proj[j].xy.x - seed.xy.x;
+        if (dx * dx + dy * dy <= CLUSTER_PX * CLUSTER_PX) {
+          taken[j] = true;
+          group.push(proj[j].p);
+        }
+      }
+
+      zones.push(makeZone(seed.p, group));
+    }
+    return zones;
+  }
+
+  function makeZone(seed, pts) {
+    const n = pts.length;
+    const sum = (fn) => pts.reduce((s, p) => s + (fn(p) || 0), 0);
+    // Nom de la zone = lieu le plus fréquent parmi ses tests.
+    const locCounts = {};
+    pts.forEach((p) => { if (p.location) locCounts[p.location] = (locCounts[p.location] || 0) + 1; });
+    const name = Object.keys(locCounts).sort((a, b) => locCounts[b] - locCounts[a])[0] || 'Zone de test';
+    return {
+      lat: seed.lat,
+      lng: seed.lng,
+      count: n,
+      name,
+      points: pts,
+      avgDl: sum((p) => p.download) / n,
+      avgUl: sum((p) => p.upload) / n,
+      avgPing: sum((p) => p.ping) / n,
+    };
   }
 
   // Niveau de qualité d'une zone : moyenne de la métrique de l'usage courant.
@@ -261,11 +290,11 @@ const MapView = (() => {
   }
 
   // Rond de zone : taille croissante avec le nombre de tests, chiffre au centre.
-  function zoneIcon(color, count) {
+  function zoneIcon(count) {
     const size = Math.round(Math.min(46, 20 + Math.log2(count + 1) * 5));
     return L.divIcon({
       className: 'yele-zone-marker',
-      html: `<div class="yele-zone" style="width:${size}px;height:${size}px;background:${color}">${count > 1 ? count : ''}</div>`,
+      html: `<div class="yele-zone" style="width:${size}px;height:${size}px;background:${MARKER_COLOR}">${count > 1 ? count : ''}</div>`,
       iconSize: [size, size],
       iconAnchor: [size / 2, size / 2],
       popupAnchor: [0, -size / 2],
@@ -305,7 +334,7 @@ const MapView = (() => {
     const breakdownRows = bd.rows.map((r) => `
       <div class="zbd-row">
         <span class="zbd-label">${escapeHtml(r.label)}</span>
-        <span class="zbd-track"><i style="width:${(r.avgDl / maxDl) * 100}%;background:#0e7a4a"></i></span>
+        <span class="zbd-track"><i style="width:${(r.avgDl / maxDl) * 100}%"></i></span>
         <span class="zbd-val">${r.avgDl.toFixed(1)}<small> · ${r.count}×</small></span>
       </div>`).join('');
 
@@ -316,93 +345,16 @@ const MapView = (() => {
           <span class="popup-net" style="background:#334155">${zone.count} test${zone.count > 1 ? 's' : ''}</span>
         </div>
         <div class="popup-quality">
-          <i style="background:${qualityColor(lvl)}"></i>${qualityLabel(lvl, state.usage)} <small style="color:var(--text-soft,#5d6478)">(moyenne de la zone)</small>
+          ${qualityLabel(lvl, state.usage)} <small style="color:var(--text-soft,#5d6478)">(moyenne de la zone)</small>
         </div>
         <div class="popup-metrics">
-          <div class="popup-metric"><b style="color:#1d4ed8">${zone.avgDl.toFixed(1)}</b><span>Mbps ↓ moy.</span></div>
-          <div class="popup-metric"><b style="color:#ea580c">${zone.avgUl.toFixed(1)}</b><span>Mbps ↑ moy.</span></div>
-          <div class="popup-metric"><b style="color:#d97706">${Math.round(zone.avgPing)}</b><span>ms moy.</span></div>
+          <div class="popup-metric"><b>${zone.avgDl.toFixed(1)}</b><span>Mbps ↓ moy.</span></div>
+          <div class="popup-metric"><b>${zone.avgUl.toFixed(1)}</b><span>Mbps ↑ moy.</span></div>
+          <div class="popup-metric"><b>${Math.round(zone.avgPing)}</b><span>ms moy.</span></div>
         </div>
         <div class="zbd-title">Débit ↓ moyen par ${grainNames[bd.grain]}</div>
         <div class="zbd">${breakdownRows || '<div class="zbd-empty">Données horodatées indisponibles.</div>'}</div>
       </div>`;
-  }
-
-  // ── Statistiques de zone (panneau droit, style ARCEP) ──────────────────────
-
-  function renderZoneStats() {
-    if (!map) return;
-
-    // Rappel de la période sélectionnée dans le sous-titre du panneau.
-    const sub = document.getElementById('zone-sub');
-    if (sub) {
-      const { grain, value } = state.period;
-      sub.textContent = grain === 'all' || value == null
-        ? 'Zone visible sur la carte'
-        : `Zone visible · ${grainValueLabel(grain, grain === 'hour' ? Number(value) : value)}`;
-    }
-
-    const bounds = map.getBounds();
-    const visible = filteredPoints().filter((p) => p.lat && p.lng && bounds.contains([p.lat, p.lng]));
-
-    const fmt = (v) => (visible.length ? v.toFixed(1) : '–');
-    const avg = (key) => visible.reduce((s, p) => s + (p[key] || 0), 0) / (visible.length || 1);
-
-    document.getElementById('zk-count').textContent = visible.length || '–';
-    document.getElementById('zk-dl').textContent = fmt(avg('download'));
-    document.getElementById('zk-ul').textContent = fmt(avg('upload'));
-    document.getElementById('zk-ping').textContent = visible.length ? Math.round(avg('ping')) : '–';
-
-    // Répartition par niveau de qualité
-    const usage = USAGES[state.usage];
-    const barBox = document.getElementById('zone-quality-bar');
-    const legBox = document.getElementById('zone-quality-legend');
-    if (!usage.available || !visible.length) {
-      barBox.innerHTML = `<div style="width:100%;background:${qualityColor(0)};opacity:.35"></div>`;
-      legBox.innerHTML = '';
-    } else {
-      const counts = { 4: 0, 3: 0, 2: 0, 1: 0 };
-      visible.forEach((p) => { counts[qualityLevel(p, state.usage)]++; });
-      barBox.innerHTML = [4, 3, 2, 1]
-        .filter((l) => counts[l] > 0)
-        .map((l) => `<div style="width:${(counts[l] / visible.length) * 100}%;background:${qualityColor(l)}"></div>`)
-        .join('');
-      legBox.innerHTML = [4, 3, 2, 1]
-        .filter((l) => counts[l] > 0)
-        .map((l) => `<span><i style="background:${qualityColor(l)}"></i>${qualityLabel(l, state.usage)} : ${Math.round((counts[l] / visible.length) * 100)}%</span>`)
-        .join('');
-    }
-
-    // Comparaison opérateurs dans la zone
-    const opBox = document.getElementById('zone-operators');
-    const byOp = {};
-    visible.forEach((p) => {
-      const op = p.operator || 'Inconnu';
-      (byOp[op] = byOp[op] || []).push(p);
-    });
-    const ops = Object.entries(byOp)
-      .map(([op, pts]) => ({
-        op,
-        count: pts.length,
-        avgDl: pts.reduce((s, p) => s + (p.download || 0), 0) / pts.length,
-      }))
-      .sort((a, b) => b.avgDl - a.avgDl);
-
-    if (!ops.length) {
-      opBox.innerHTML = '<div class="zone-empty">Aucun test dans la zone visible.</div>';
-      return;
-    }
-    const maxDl = Math.max(...ops.map((o) => o.avgDl), 1);
-    opBox.innerHTML = ops.map((o) => `
-      <div class="zone-op">
-        <div class="zone-op-head">
-          <b style="color:${operatorColor(o.op)}">${o.op}</b>
-          <span>${o.avgDl.toFixed(1)} Mbps · ${o.count} test${o.count > 1 ? 's' : ''}</span>
-        </div>
-        <div class="zone-op-track">
-          <div class="zone-op-fill" style="width:${(o.avgDl / maxDl) * 100}%;background:${operatorColor(o.op)}"></div>
-        </div>
-      </div>`).join('');
   }
 
   // ── Contrôles ───────────────────────────────────────────────────────────────
@@ -448,9 +400,13 @@ const MapView = (() => {
     // Période (grain heure / jour / semaine)
     bindPeriod();
 
-    // Repli du panneau de zone
-    document.getElementById('zone-collapse').addEventListener('click', () => {
-      document.getElementById('zone-panel').classList.toggle('collapsed');
+    // Repli du panneau de filtres, pour dégager la carte.
+    const panel = document.getElementById('control-panel');
+    const toggle = document.getElementById('panel-toggle');
+    toggle.addEventListener('click', () => {
+      const collapsed = panel.classList.toggle('collapsed');
+      toggle.setAttribute('aria-expanded', String(!collapsed));
+      toggle.title = collapsed ? 'Afficher les filtres' : 'Replier les filtres';
     });
 
     // Géolocalisation du navigateur
