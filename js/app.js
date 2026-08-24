@@ -1,4 +1,4 @@
-// ─── Application : navigation, recherche, statut serveur ────────────────────
+// ─── Application : navigation entre vues, recherche d'adresse, notifications ─
 
 const App = (() => {
   // ── Navigation entre vues ───────────────────────────────────────────────────
@@ -56,18 +56,6 @@ const App = (() => {
     });
   }
 
-  // ── Statut du serveur ───────────────────────────────────────────────────────
-
-  async function checkHealth() {
-    const dot = document.getElementById('status-dot');
-    const label = document.getElementById('status-label');
-    // L'indicateur de statut n'est pas affiché dans toutes les mises en page.
-    if (!dot && !label) return;
-    const ok = await API.health();
-    if (dot) dot.className = 'status-dot ' + (ok ? 'ok' : 'ko');
-    if (label) label.textContent = ok ? 'Serveur en ligne' : 'Serveur hors ligne';
-  }
-
   // ── Bannière "bientôt disponible" & toast ───────────────────────────────────
 
   let bannerTimer = null;
@@ -106,9 +94,6 @@ const App = (() => {
     if (requested && document.getElementById('view-' + requested)) switchView(requested);
     const usage = params.get('usage');
     if (usage) document.querySelector(`.usage-tab[data-usage="${usage}"]`)?.click();
-
-    checkHealth();
-    setInterval(checkHealth, 60_000);
   }
 
   document.addEventListener('DOMContentLoaded', init);

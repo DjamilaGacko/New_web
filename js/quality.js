@@ -1,7 +1,9 @@
 // ─── Niveaux de qualité & usages (style ARCEP : 4 niveaux) ───────────────────
-// Chaque "usage" définit comment évaluer un point de test. Les usages
-// streaming et navigation web sont déclarés mais inactifs : il suffira de
-// renseigner `metric` + `levels` quand le backend exposera ces mesures.
+// Chaque "usage" définit comment évaluer un point de test : quelle métrique
+// lire, et à quels seuils la comparer. Pour en ajouter un, il suffit d'une
+// entrée dans USAGES et d'un bouton dans le panneau de la carte.
+// Un usage marqué `available: false` affiche une bannière « bientôt disponible »
+// au lieu d'une carte vide ; son message se règle via `soonHint`.
 
 const QUALITY_COLORS = {
   4: getCss('--q4'), // très bonne

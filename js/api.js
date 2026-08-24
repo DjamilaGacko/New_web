@@ -74,16 +74,6 @@ const API = (() => {
       return get(`/api/dashboard/results?${params}`, { useCache: false });
     },
 
-    // Vérification de disponibilité du serveur
-    async health() {
-      try {
-        const res = await fetch(BASE + '/getIP', { signal: AbortSignal.timeout(8000) });
-        return res.ok;
-      } catch {
-        return false;
-      }
-    },
-
     // Géocodage d'adresse (OpenStreetMap Nominatim)
     async geocode(query) {
       const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=5&q=' + encodeURIComponent(query);

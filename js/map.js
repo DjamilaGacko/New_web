@@ -365,8 +365,11 @@ const MapView = (() => {
       tab.addEventListener('click', () => {
         const key = tab.dataset.usage;
         const usage = USAGES[key];
+        // Un usage sans `available` n'est pas encore mesuré par l'application
+        // mobile : on le signale au lieu d'afficher une carte vide.
         if (!usage.available) {
-          App.showSoonBanner(usage.label, usage.soonText);
+          App.showSoonBanner(usage.label, usage.soonHint
+            || "Cette mesure n'est pas encore remontée par l'application mobile.");
           return;
         }
         document.querySelectorAll('#usage-tabs .usage-tab').forEach((t) => t.classList.remove('active'));
