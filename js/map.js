@@ -5,6 +5,7 @@ const MapView = (() => {
   let markersLayer = null;
   let heatLayer = null;
   let allPoints = [];
+  let countryBounds = null;
 
   const state = {
     usage: 'debit',
@@ -29,6 +30,16 @@ const MapView = (() => {
 
   const WEEKDAYS = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
 
+  // Rectangle couvrant toute la Terre, sens horaire. Associé au contour du
+  // Burkina en second anneau, il donne un polygone « troué » : tout est peint
+  // SAUF le pays. Les latitudes s'arrêtent à ±85° (limite de la projection
+  // Web Mercator, au-delà de laquelle la projection diverge).
+  const WORLD_RING = [[-85, -180], [-85, 180], [85, 180], [85, -180]];
+
+  // Couleur du masque : celle du fond de page, pour que l'extérieur du pays se
+  // lise comme du vide et non comme une mer ou un territoire non renseigné.
+  const MASK_COLOR = getCss('--bg') || '#f4f6fa';
+
   const baseLayers = {
     plan: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap', maxZoom: 19,
@@ -41,10 +52,24 @@ const MapView = (() => {
   // ── Initialisation ──────────────────────────────────────────────────────────
 
   function init() {
-    map = L.map('main-map', { zoomControl: false })
-      .setView(CONFIG.MAP_CENTER, CONFIG.MAP_ZOOM);
+    // La carte ne montre que le Burkina Faso. `maxBounds` + une viscosité de 1
+    // rendent la sortie du cadre impossible : le déplacement bute sur la
+    // frontière au lieu de dériver vers les pays voisins. Le cadre est
+    // légèrement élargi (pad) pour que le bord du pays ne colle pas à l'écran.
+    countryBounds = L.latLngBounds(BURKINA_BOUNDS);
+    map = L.map('main-map', {
+      zoomControl: false,
+      maxBounds: countryBounds.pad(0.06),
+      maxBoundsViscosity: 1,
+    }).fitBounds(countryBounds);
+
+    // Le pays entier tenant à l'écran au zoom courant, aucun dézoom au-delà
+    // n'apporterait d'information : on en fait le plancher.
+    map.setMinZoom(map.getZoom());
+
     L.control.zoom({ position: 'bottomright' }).addTo(map);
     baseLayers.plan.addTo(map);
+    addCountryMask();
     markersLayer = L.layerGroup().addTo(map);
 
     // Le regroupement dépend du zoom : il faut le recalculer à chaque niveau.
@@ -52,6 +77,27 @@ const MapView = (() => {
 
     bindControls();
     loadData();
+  }
+
+  // Masque les pays voisins. Le fond de carte (OpenStreetMap ou satellite) est
+  // servi par tuiles carrées : impossible de n'en demander que le Burkina. On
+  // le recouvre donc d'un polygone plein percé à la forme du pays.
+  //
+  // `interactive: false` est indispensable : sans lui, le masque intercepterait
+  // les clics et les popups des points de test ne s'ouvriraient plus. Le
+  // polygone vit dans l'overlayPane, donc au-dessus des tuiles mais en dessous
+  // des marqueurs (markerPane) — l'ordre voulu.
+  function addCountryMask() {
+    L.polygon([WORLD_RING, BURKINA_OUTLINE], {
+      fillColor: MASK_COLOR, fillOpacity: 1, fillRule: 'evenodd',
+      stroke: false, interactive: false,
+    }).addTo(map);
+
+    // Frontière redessinée par-dessus : le bord du masque seul serait crénelé.
+    L.polygon(BURKINA_OUTLINE, {
+      color: getCss('--green') || '#0e7a4a', weight: 1.5, opacity: .85,
+      fill: false, interactive: false,
+    }).addTo(map);
   }
 
   // Bandeau d'attente : le premier appel peut être long si le backend
@@ -416,7 +462,7 @@ const MapView = (() => {
     document.getElementById('locate-btn').addEventListener('click', () => {
       if (!navigator.geolocation) return App.toast('Géolocalisation non disponible');
       navigator.geolocation.getCurrentPosition(
-        (pos) => map.flyTo([pos.coords.latitude, pos.coords.longitude], 13),
+        (pos) => flyTo(pos.coords.latitude, pos.coords.longitude, 13),
         () => App.toast('Position introuvable — vérifiez les autorisations')
       );
     });
@@ -465,8 +511,16 @@ const MapView = (() => {
     sel.style.display = '';
   }
 
+  // La carte étant bornée au Burkina, viser un point extérieur ne produirait
+  // qu'un recadrage silencieux sur la frontière la plus proche. On le dit.
   function flyTo(lat, lng, zoom = 13) {
-    if (map) map.flyTo([lat, lng], zoom);
+    if (!map) return false;
+    if (!countryBounds.contains([lat, lng])) {
+      App.toast('Ce lieu est hors du Burkina Faso — la carte ne couvre que le pays.');
+      return false;
+    }
+    map.flyTo([lat, lng], zoom);
+    return true;
   }
 
   function invalidate() {

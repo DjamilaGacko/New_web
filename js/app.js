@@ -11,7 +11,6 @@ const App = (() => {
 
     if (name === 'map') MapView.invalidate();
     if (name === 'operators') Operators.show();
-    if (name === 'compare') Compare.show();
     if (name === 'stats') Stats.show();
     if (name === 'history') History.show();
     if (name === 'ai') AIView.show();

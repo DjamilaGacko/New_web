@@ -28,7 +28,6 @@
   <nav class="topnav">
     <button class="topnav-item active" data-view="map">Carte</button>
     <button class="topnav-item" data-view="operators">Opérateurs</button>
-    <button class="topnav-item" data-view="compare">Comparer les opérateurs</button>
     <button class="topnav-item" data-view="stats">Statistiques</button>
     <button class="topnav-item" data-view="history">Historique des tests</button>
     <button class="topnav-item" data-view="ai">Analyse IA</button>
@@ -166,15 +165,6 @@
   </div>
 </section>
 
-<!-- ─── Vue Comparer ────────────────────────────────────────────────────────── -->
-<section class="view view-compare" id="view-compare">
-  <div class="page-head">
-    <h1>Comparer les opérateurs</h1>
-    <p>Cartes synchronisées : déplacez ou zoomez l'une des cartes, les autres suivent. Chaque carte affiche les tests d'un seul opérateur.</p>
-  </div>
-  <div class="compare-grid" id="compare-grid"></div>
-</section>
-
 <!-- ─── Vue Statistiques ────────────────────────────────────────────────────── -->
 <section class="view view-stats" id="view-stats">
   <div class="page-head">
@@ -310,9 +300,9 @@
 <script src="config.js"></script>
 <script src="js/quality.js"></script>
 <script src="js/api.js"></script>
+<script src="js/burkina.js"></script>
 <script src="js/map.js"></script>
 <script src="js/operators.js"></script>
-<script src="js/compare.js"></script>
 <script src="js/stats.js"></script>
 <script src="js/history.js"></script>
 <script src="js/ai.js"></script>

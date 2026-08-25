@@ -74,9 +74,13 @@ const API = (() => {
       return get(`/api/dashboard/results?${params}`, { useCache: false });
     },
 
-    // Géocodage d'adresse (OpenStreetMap Nominatim)
+    // Géocodage d'adresse (OpenStreetMap Nominatim).
+    // `countrycodes=bf` restreint les résultats au Burkina Faso : la carte ne
+    // couvrant que le pays, proposer une adresse étrangère mènerait à une
+    // impasse.
     async geocode(query) {
-      const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=5&q=' + encodeURIComponent(query);
+      const url = 'https://nominatim.openstreetmap.org/search?format=json&countrycodes=bf&limit=5&q='
+        + encodeURIComponent(query);
       const res = await fetch(url, { headers: { 'Accept-Language': 'fr' } });
       if (!res.ok) return [];
       return res.json();

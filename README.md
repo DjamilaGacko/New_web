@@ -61,22 +61,22 @@ Tout tient dans **`config.js`** :
 ```js
 const CONFIG = {
   API_BASE_URL: 'https://mobiletest-j0c6.onrender.com',
-  MAP_CENTER: [12.3656, -1.5197],   // Ouagadougou
-  MAP_ZOOM: 7,
 };
 ```
+
+Le cadrage de la carte ne s'y règle pas : il découle du contour du pays
+(`js/burkina.js`).
 
 Pour travailler contre un backend local : `API_BASE_URL: 'http://localhost:8989'`.
 
 ---
 
-## Les six vues
+## Les cinq vues
 
 | Onglet | Fichier | Contenu |
 |---|---|---|
-| **Carte** | `js/map.js` | Carte plein écran, filtres repliables, regroupement automatique des points |
+| **Carte** | `js/map.js` | Carte du Burkina Faso, filtres repliables, regroupement automatique des points |
 | **Opérateurs** | `js/operators.js` | Tableau comparatif : période x opérateur x lieu, triable |
-| **Comparer les opérateurs** | `js/compare.js` | Quatre cartes synchronisées, une par opérateur |
 | **Statistiques** | `js/stats.js` | KPIs, graphiques Chart.js, percentiles |
 | **Historique des tests** | `js/history.js` | Tableau paginé et filtrable de toutes les mesures |
 | **Analyse IA** | `js/ai.js` | Anomalies détectées et prévision de débit à 48 h |
@@ -91,14 +91,14 @@ Liens profonds : `?view=stats` ouvre directement une vue,
 
 ```
 index.html          Toutes les vues, en sections masquées/affichées
-config.js           URL du backend, centre et zoom de la carte
+config.js           URL du backend
 css/style.css       L'intégralité du style
 js/
 ├── quality.js      *** À LIRE EN PREMIER *** niveaux de qualité, dates, couleurs
 ├── api.js          Client HTTP du backend (cache, tentatives successives)
+├── burkina.js      Contour du pays (données OpenStreetMap simplifiées)
 ├── map.js          Vue Carte
 ├── operators.js    Vue Opérateurs
-├── compare.js      Vue Comparer
 ├── stats.js        Vue Statistiques
 ├── history.js      Vue Historique
 ├── ai.js           Vue Analyse IA
@@ -107,7 +107,8 @@ js/
 
 Chaque fichier `js/` expose un module unique via une IIFE (`MapView`, `Stats`,
 `History`...). L'ordre de chargement dans `index.html` compte : `quality.js`
-définit des fonctions utilisées par tous les autres.
+définit des fonctions utilisées par tous les autres, et `burkina.js` doit
+précéder `map.js`, qui s'en sert dès son initialisation.
 
 ### Aucune dépendance installée localement
 
@@ -160,20 +161,41 @@ barycentre : par construction, deux graines sont distantes d'au moins 56 pixels,
 ce qui garantit qu'aucun rond ne peut en chevaucher un autre. En zoomant, les
 groupes se scindent d'eux-mêmes et le détail réapparaît.
 
-### 4. La convention « zéro = non mesuré »
+### 4. La carte ne montre que le Burkina Faso
+
+Le fond de carte est servi par tuiles carrées : il est impossible de n'en
+demander que le territoire national. Les pays voisins sont donc **recouverts**
+par un polygone plein percé à la forme du Burkina — le rectangle du monde en
+premier anneau, le contour du pays en second, avec `fillRule: 'evenodd'`.
+
+Ce polygone est obligatoirement `interactive: false`, sans quoi il
+intercepterait les clics et les popups des points de test ne s'ouvriraient plus.
+
+Le cadrage est verrouillé : `maxBounds` sur l'emprise du pays avec une
+viscosité de 1 (le déplacement bute sur la frontière au lieu de dériver), et un
+zoom minimal calé sur celui qui fait tenir le pays à l'écran. La recherche
+d'adresse est elle aussi restreinte au pays (`countrycodes=bf` côté Nominatim),
+et `MapView.flyTo()` refuse — en le signalant — tout point extérieur.
+
+Le contour vient de la relation OpenStreetMap 192783, simplifiée par
+Douglas-Peucker à 0,005° (≈ 550 m) : 794 sommets au lieu de 30 240, soit 15 Ko.
+Pour le régénérer plus finement, réduire la tolérance — la précision utile est
+bornée par le zoom maximal du site.
+
+### 5. La convention « zéro = non mesuré »
 
 Un `streamingScore` ou un `browsingAvgLoadMs` à zéro signifie **test non
 effectué**, pas « résultat nul ». Ces points sont affichés en gris (niveau 0) et
 non comme de mauvaises mesures.
 
-### 5. Échappement systématique
+### 6. Échappement systématique
 
 Les champs issus de la télémétrie (`operator`, `deviceModel`, `location`) sont
 saisis par des appareils tiers. Ils passent **obligatoirement** par
 `escapeHtml()` avant toute insertion dans le DOM. C'est la protection contre les
 injections de code stocké : ne pas la contourner en ajoutant une colonne.
 
-### 6. Le réveil du backend
+### 7. Le réveil du backend
 
 Le backend de démonstration tourne sur l'offre gratuite de Render : il s'endort
 après quinze minutes d'inactivité et met jusqu'à une minute à redémarrer.
