@@ -48,7 +48,9 @@ svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; 
 }
 
 .brand { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
-.brand svg { width: 36px; height: 36px; }
+/* Logo plus grand que l'ancien pictogramme : il est nettement plus détaillé
+   (pylône, carte, graphique) et devient illisible en dessous de ~40 px. */
+.brand-logo { width: 50px; height: 50px; object-fit: contain; display: block; }
 .brand-text { display: flex; flex-direction: column; line-height: 1.15; }
 .brand-title { font-size: 16px; font-weight: 500; color: var(--navy); }
 .brand-title b { font-weight: 800; color: var(--green); }
